@@ -1,4 +1,4 @@
-# UCSB Computer Science Course Lists
+# course_lists.py
 
 ## Overview
 
