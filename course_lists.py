@@ -22,12 +22,20 @@ EMAILS = {'Singh A K': 'ambuj@cs.ucsb.edu',
 class StupidUCSBWebApp(object):
     PREFIX = 'ctl00$pageContent${}'
 
-    def __init__(self):
+    def __init__(self, debug=False):
         self.session = requests.session()
         self.view_state = None
         self.event_validation = None
+        self.debug = debug
 
-    def request(self, url, data=None, soupify=True):
+    def request(self, url, data=None, soupify=True, disable_debug=False):
+        if self.debug:
+            print('Fetching {0}'.format(url))
+            if data and not disable_debug:
+                print(data)
+            elif data:
+                print('POST data hidden')
+                print()
         if not data:
             r = self.session.get(url)
         else:
@@ -73,7 +81,8 @@ class Egrades(StupidUCSBWebApp):
             password = getpass.getpass()
             _, r = self.request(url, {'txtUCSBNetID': username,
                                       'txtPassword': password,
-                                      'btnContinue.?': 0})
+                                      'btnContinue.?': 0},
+                                disable_debug=True)
             if r.url != url:
                 return
             print('Login failed, try again.')
@@ -95,13 +104,22 @@ class Egrades(StupidUCSBWebApp):
             self.quarter = current_quarter
         for item in soup('input', type='image'):
             value = item['name'][len(self.PREFIX) - 2:]
-            if 'Secondary' not in value:
-                yield ''.join(item['title'].split()[1:3]), value
+            if 'Secondary' in value:
+                continue
+
+            # Skip classes with no students
+            students_raw = item.parent.parent.findAll('td')[4].contents[0]
+            num_students = int(students_raw.strip().split('/')[0])
+            if num_students <= 0:
+                continue
+
+            yield ''.join(item['title'].split()[1:3]), value
 
     def fetch_course_list(self, course_key, save_dir):
         # Visit class page
         _, r = self.request(self.URL_INSTRUCTOR, {'{}.?'.format(course_key): 0})
         self.verify_url(self.URL_GRADEBOOK, r.url)
+
         _, r = self.request(self.URL_GRADEBOOK, {'btnDownloadGradesTop.?': 0})
         self.verify_url(self.URL_DOWNLOAD, r.url)
         r = self.request(self.URL_DOWNLOAD, {'Download.?': 0}, soupify=False)
@@ -244,6 +262,7 @@ def main():
     parser.add_option('-l', '--load', metavar='DIR', help=msg['load'])
     parser.add_option('-s', '--save', metavar='DIR', help=msg['save'])
     parser.add_option('-q', '--quarter', help=msg['quarter'])
+    parser.add_option('-d', '--debug', action='store_true')
     options, args = parser.parse_args()
     if len(args) != 1:
         parser.error('Must provide TA_CSV_FILE argument')
@@ -268,7 +287,7 @@ def main():
         quarter = '20{}{}'.format(quarter[1:],
                                   {'W': 1, 'S': 2, 'M': 3, 'F': 4}[quarter[0]])
     else:
-        e = Egrades()
+        e = Egrades(debug=options.debug)
         e.login()
         for course, value in e.find_courses(options.quarter):
             students = e.fetch_course_list(value, options.save)
