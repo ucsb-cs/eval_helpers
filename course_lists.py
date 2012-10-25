@@ -32,10 +32,9 @@ class StupidUCSBWebApp(object):
         if self.debug:
             print('Fetching {0}'.format(url))
             if data and not disable_debug:
-                print(data)
+                print('{!s}\n'.format(data))
             elif data:
-                print('POST data hidden')
-                print()
+                print('POST data hidden\n')
         if not data:
             r = self.session.get(url)
         else:
@@ -185,7 +184,7 @@ class CourseCatelog(StupidUCSBWebApp):
 
     def get_instructors(self, quarter, include, faculty_email):
         self.request(self.URL)
-        soup, _ = self.request(self.URL, {'courseList': 'CMPSC   ',
+        soup, _ = self.request(self.URL, {'courseList': 'CMPSC',
                                           'quarterList': quarter,
                                           'dropDownCourseLevels': 'All',
                                           'searchButton.?': 0})
@@ -296,7 +295,7 @@ def main():
     course_set = set(course_data)
 
     # add instructor information to courses
-    c = CourseCatelog()
+    c = CourseCatelog(debug=options.debug)
     courses = c.get_instructors(quarter, course_set, faculty_email)
     for course, instructor in courses:
         course_data[course]['instructor'] = instructor
