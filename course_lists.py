@@ -18,7 +18,7 @@ EMAILS = {'Singh A K': 'ambuj@cs.ucsb.edu',
           'Moser L E': 'moser@ece.ucsb.edu',
           'Buoni M J': 'buoni@cs.ucsb.edu'}
 
-
+#parent class with debugging features, and html requests
 class StupidUCSBWebApp(object):
     PREFIX = 'ctl00$pageContent${}'
 
@@ -36,7 +36,8 @@ class StupidUCSBWebApp(object):
             elif data:
                 print('POST data hidden\n')
         if not data:
-            r = self.session.get(url)
+            # verify=False ignores ssl certs... sometimes it seems the coursesearch cert is broken
+            r = self.session.get(url, verify=False)
         else:
             params = {'__VIEWSTATE': self.view_state,
                       '__EVENTVALIDATION': self.event_validation}
@@ -64,7 +65,8 @@ class StupidUCSBWebApp(object):
         if expected != url:
             raise Exception('Expected {!r} Found {!r}'.format(expected, url))
 
-
+#this class downloads all of the students from the UCSB egrades website, the person running this
+#script must be marked as a proxy on egrades.
 class Egrades(StupidUCSBWebApp):
     URL_BASE = 'https://egrades.sa.ucsb.edu/'
     URL_DOWNLOAD = urljoin(URL_BASE, 'ClasslistDownload.aspx')
@@ -180,7 +182,7 @@ class CSGradEmail(object):
 
 
 class CourseCatelog(StupidUCSBWebApp):
-    URL = 'http://my.sa.ucsb.edu/public/curriculum/coursesearch.aspx'
+    URL = 'https://my.sa.ucsb.edu/public/curriculum/coursesearch.aspx'
 
     def get_instructors(self, quarter, include, faculty_email):
         self.request(self.URL)
@@ -220,9 +222,9 @@ def add_tas(ta_csv_file, include, grad_email):
         tas = []
         for item in row[16:]:
             if not item:
-                continue
-            if 'grader' in item or not name_re.match(item):
-                #print('Skipping {!r} for {!r}'.format(item, course))
+                 continue
+            if 'reader' in item or not name_re.match(item):
+                print('Skipping {!r} for {!r}'.format(item, course))
                 continue
             name = item.strip()
             email = grad_email.get_email(name)

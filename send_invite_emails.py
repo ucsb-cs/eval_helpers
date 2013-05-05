@@ -4,7 +4,8 @@ import os
 import smtplib
 import sys
 
-
+#This program takes in a .json file containing the email addresses of students and 
+#emails them an invitation to rate their TA.  Must be run from a UCSB server.
 def main():
     try:
         data = json.load(open(sys.argv[1]))
@@ -23,6 +24,7 @@ def main():
     smtp.connect('stamps.cs.ucsb.edu')
 
     for info in data['emails']:
+        print 'sending to {!r} \n'.format(info['email'])
         body = template.format(student=info['name'], body=info['output'])
         msg = 'From: {}\nTo: {}\nSubject: {}\n\n{}'.format(
             from_email, info['email'], subject, body)
