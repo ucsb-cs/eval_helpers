@@ -4,16 +4,18 @@ import os
 import smtplib
 import sys
 
-#This program takes in a .json file containing the email addresses of students and 
+#This program takes in a .json file or a directory full of .json files containing the email addresses of students and 
 #emails them an invitation to rate their TA.  Must be run from a UCSB server.
-def main():
+
+def process_file(filename):
+    print "---Processing " + filename + " -------"
     try:
-        data = json.load(open(sys.argv[1]))
+        data = json.load(open(filename))
     except (IndexError, IOError):
         print 'Usage: {} emails_json'.format(os.path.basename(sys.argv[0]))
         sys.exit(1)
     except ValueError:
-        print '{!r} is not a valid json file'.format(sys.argv[1])
+        print '{!r} is not a valid json file'.format(filename)
         sys.exit(1)
 
     from_email = 'Computer Science Lead TA <leadta@cs.ucsb.edu>'
@@ -29,10 +31,21 @@ def main():
         msg = 'From: {}\nTo: {}\nSubject: {}\n\n{}'.format(
             from_email, info['email'], subject, body)
         smtp.sendmail(from_email, info['email'], msg)
-        sys.stdout.write('.')
-        sys.stdout.flush()
     print
     smtp.quit()
+
+
+def main():
+    if os.path.isdir(sys.argv[1]):   
+        for subdir, dirs, files in os.walk(sys.argv[1]):
+            for file in files:    
+                process_file(subdir+'/'+file)
+    else:
+        process_file(sys.argv[1])
+                
+    
+
+    
 
 
 if __name__ == '__main__':
