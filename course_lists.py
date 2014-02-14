@@ -16,7 +16,14 @@ EMAILS = {'Singh A K': 'ambuj@cs.ucsb.edu',
           'Costanzo C': 'mikec@cs.ucsb.edu',
           'Koc C K': 'koc@cs.ucsb.edu',
           'Moser L E': 'moser@ece.ucsb.edu',
-          'Buoni M J': 'buoni@cs.ucsb.edu'}
+          'Buoni M J': 'buoni@cs.ucsb.edu',
+          'Manjunath B S': 'manj@ece.ucsb.edu',
+          'Sen P': 'psen@ece.ucsb.edu',
+          'Tessaro S M': 'tessaro@cs.ucsb.edu',
+          'Kim T': 'kim@mat.ucsb.edu'}
+CSV_COURSE_COL = 0
+CSV_INSTRUCTOR_COL = 1
+CSV_TA_COL = 2
 
 #parent class with debugging features, and html requests
 class StupidUCSBWebApp(object):
@@ -74,6 +81,7 @@ class Egrades(StupidUCSBWebApp):
     URL_INSTRUCTOR = urljoin(URL_BASE, 'InstructorMain.aspx')
 
     def login(self):
+        print "Connecting to egrades"
         url = urljoin(self.URL_BASE, 'Login.aspx')
         self.request(url)
         while True:
@@ -88,8 +96,9 @@ class Egrades(StupidUCSBWebApp):
                 return
             print('Login failed, try again.')
 
-    def find_courses(self, quarter):
+    def find_courses(self, quarter, faculty_email):
         # Make proxy selection
+        print "Downloading class lists..."
         url = urljoin(self.URL_BASE, 'RoleSelection.aspx')
         soup, r = self.request(url, {'roleSelectList': 'Proxy',
                                      'continueButton.?': 0})
@@ -104,6 +113,8 @@ class Egrades(StupidUCSBWebApp):
         else:
             self.quarter = current_quarter
         for item in soup('input', type='image'):
+            #print "ITEM:"
+            #print item
             value = item['name'][len(self.PREFIX) - 2:]
             if 'Secondary' in value:
                 continue
@@ -113,8 +124,12 @@ class Egrades(StupidUCSBWebApp):
             num_students = int(students_raw.strip().split('/')[0])
             if num_students <= 0:
                 continue
+                
+            prof_raw = item.parent.parent.findAll('td')[2].contents[0]
+            professor = prof_raw.rstrip('&nbsp;').strip().title()
+            email = faculty_email.get_email(professor)
 
-            yield ''.join(item['title'].split()[1:3]), value
+            yield ''.join(item['title'].split()[1:3]), {'name': professor, 'email': email}, value
 
     def fetch_course_list(self, course_key, save_dir):
         # Visit class page
@@ -180,56 +195,60 @@ class CSGradEmail(object):
             return self.mapping[name_key]
         return ask_for_email(name)
 
+#not sure why we get instructor names from the course catalog when they exist the exact same on egrades
+#so i commented this out
+#class CourseCatelog(StupidUCSBWebApp):
+#    URL = 'https://my.sa.ucsb.edu/public/curriculum/coursesearch.aspx'
+#
+#    def get_instructors(self, quarter, include, faculty_email):
+#        self.request(self.URL)
+#        soup, _ = self.request(self.URL, {'courseList': 'CMPSC',
+#                                          'quarterList': quarter,
+#                                          'dropDownCourseLevels': 'All',
+#                                          'searchButton.?': 0})
+#        course_rows = soup('tr', attrs={'class': 'CourseInfoRow'})
+#        seen = set()
+#        for course_row in course_rows:
+#            name_td = course_row('td')[1]
+#            name_td.div.extract()
+#            course = name_td.contents[0].strip().replace(' ', '').lower()
+#            if course not in seen and course in include:
+#                course_row('td')[4].div.extract()
+#                instructor = course_row('td')[5].contents[0].strip().title()
+#                email = faculty_email.get_email(instructor)
+#                yield course, {'name': instructor, 'email': email}
+#                seen.add(course)
 
-class CourseCatelog(StupidUCSBWebApp):
-    URL = 'https://my.sa.ucsb.edu/public/curriculum/coursesearch.aspx'
 
-    def get_instructors(self, quarter, include, faculty_email):
-        self.request(self.URL)
-        soup, _ = self.request(self.URL, {'courseList': 'CMPSC',
-                                          'quarterList': quarter,
-                                          'dropDownCourseLevels': 'All',
-                                          'searchButton.?': 0})
-        course_rows = soup('tr', attrs={'class': 'CourseInfoRow'})
-        seen = set()
-        for course_row in course_rows:
-            name_td = course_row('td')[1]
-            name_td.div.extract()
-            course = name_td.contents[0].strip().replace(' ', '').lower()
-            if course not in seen and course in include:
-                course_row('td')[4].div.extract()
-                instructor = course_row('td')[5].contents[0].strip().title()
-                email = faculty_email.get_email(instructor)
-                yield course, {'name': instructor, 'email': email}
-                seen.add(course)
-
-
-def add_tas(ta_csv_file, include, grad_email):
+def get_tas(ta_csv_file, include, grad_email):
     try:
         tas_csv = csv.reader(open(ta_csv_file), delimiter=',', quotechar='"')
     except IOError:
         sys.stderr.write('{!r} does not exist\n'.format(ta_csv_file))
         sys.exit(1)
     name_re = re.compile('^[A-Za-z -]+$')
+
     for row in tas_csv:
-        course_field = row[0].strip()
-        if not course_field or not course_field[0].isdigit():
+        course_field = row[CSV_COURSE_COL].strip()
+
+        if not course_field or not course_field[CSV_COURSE_COL].isdigit():
             continue
+        instructor = row[CSV_INSTRUCTOR_COL].strip().title()
         course = 'cmpsc{}'.format(course_field).lower()
-        if course not in include:
+        if format_course_key(course,instructor) not in include:
             print('Ignoring course {!r}'.format(course))
             continue
         tas = []
-        for item in row[16:]:
+        for item in row[CSV_TA_COL:]:
             if not item:
                  continue
-            if 'reader' in item or not name_re.match(item):
+            if 'reader' in item.lower() or not name_re.match(item):
                 print('Skipping {!r} for {!r}'.format(item, course))
                 continue
             name = item.strip()
             email = grad_email.get_email(name)
             tas.append({'name': name, 'email': email})
-        yield course, tas
+        yield course, instructor, tas
 
 
 def ask_for_email(name):
@@ -245,11 +264,24 @@ def get_students(data):
             continue
         name = '{} {}'.format(row[5], row[4]).strip().title()
         email = row[10].strip()
+        grade = row[2].strip()
+        #ignore students who have withdrawn
+        if grade is 'W':
+            continue
         if not email:
             email = ask_for_email(name)
         students.append({'name': name, 'email': email})
     return students
 
+def format_course_key(course, instructor):
+    name=''
+    #If the person has two last names, we want both of them, otherwise just their last name, no initials
+    if len(instructor.split(" ")) > 1 and len(instructor.split(" ")[1]) > 1:
+        name =  instructor.split(" ")[0] + "_" + instructor.split(" ")[1]
+    else:
+        name = instructor.split(" ")[0]
+    
+    return course.lower()+'_'+name.lower()
 
 def main():
     msg = {'load': 'When provided, course rosters are loaded from DIR.',
@@ -267,12 +299,14 @@ def main():
     options, args = parser.parse_args()
     if len(args) != 1:
         parser.error('Must provide TA_CSV_FILE argument')
+    elif not args[0].lower().endswith('.csv') :
+        parser.error('The file provided must be a .CSV file')
+        
 
     # error on mutually exclusive options
     for x, y in (('load', 'save'), ('load', 'quarter')):
         if getattr(options, x) and getattr(options, y):
             parser.error('--{} and --{} cannot both be provided.'.format(x, y))
-
     # Initialize requests
     faculty_email = CSFacultyEmail()
     grad_email = CSGradEmail()
@@ -290,21 +324,27 @@ def main():
     else:
         e = Egrades(debug=options.debug)
         e.login()
-        for course, value in e.find_courses(options.quarter):
+        for course, instructor, value in e.find_courses(options.quarter, faculty_email):
             students = e.fetch_course_list(value, options.save)
-            course_data[course.lower()] = {'students': students}
+            print 'course:' + course + ' professor:' + str(instructor)
+            course_data[ format_course_key(course,instructor['name']) ] = {'students': students}
+            course_data[ format_course_key(course,instructor['name']) ]['instructor'] = instructor
         quarter = e.quarter
     course_set = set(course_data)
 
+    #not sure why we get instructor names from the course catalog when they exist the exact same on egrades
+    #so i commented this out
     # add instructor information to courses
-    c = CourseCatelog(debug=options.debug)
-    courses = c.get_instructors(quarter, course_set, faculty_email)
-    for course, instructor in courses:
-        course_data[course]['instructor'] = instructor
+    #c = CourseCatelog(debug=options.debug)
+    #courses = c.get_instructors(quarter, course_set, faculty_email)
+    #for course, instructor in courses:
+    #    print course
+    #    print instructor
+    #    course_data[course+"|"+instructor['name']]['instructor'] = instructor
 
     # add ta information to courses
-    for course, tas in add_tas(args[0], course_set, grad_email):
-        course_data[course]['tas'] = tas
+    for course, instructor, tas in get_tas(args[0], course_set, grad_email):
+        course_data[ format_course_key(course,instructor) ]['tas'] = tas
 
     json.dump(course_data, open('output.json', 'w'))
 
